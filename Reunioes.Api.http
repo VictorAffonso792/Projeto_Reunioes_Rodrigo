@@ -1,0 +1,11 @@
+@Reunioes.Api_HostAddress = http://localhost:5125
+
+GET {{Reunioes.Api_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###
+
+GET {{Reunioes.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
