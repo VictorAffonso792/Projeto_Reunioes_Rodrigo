@@ -30,8 +30,29 @@ namespace Reunioes.Api.Controllers
             return Ok(reservas);
         }
 
+        // GET: api/reservas/total-ultimos-7-dias
+        [HttpGet("total-ultimos-7-dias")]
+        public async Task<IActionResult> TotalUltimosSeteDias()
+        {
+            var agora = DateTime.UtcNow;
+            var inicioPeriodo = agora.AddDays(-7);
+
+            var total = await _context.Reservas
+                .AsNoTracking()
+                .CountAsync(r =>
+                    r.Inicio >= inicioPeriodo &&
+                    r.Inicio <= agora);
+
+            return Ok(new
+            {
+                periodoInicio = inicioPeriodo,
+                periodoFim = agora,
+                totalReunioes = total
+            });
+        }
+
         // GET: api/reservas/3
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<ActionResult<Reserva>> ConsultarReserva(int id)
         {
             var reserva = await _context.Reservas
@@ -117,7 +138,7 @@ namespace Reunioes.Api.Controllers
         }
 
         // PUT: api/reservas/3
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         public async Task<IActionResult> RemarcarReserva(
             int id,
             [FromBody] Reserva dadosAtualizados)
@@ -211,7 +232,7 @@ namespace Reunioes.Api.Controllers
         }
 
         // DELETE: api/reservas/3
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> CancelarReserva(int id)
         {
             var reserva = await _context.Reservas

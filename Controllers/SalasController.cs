@@ -72,20 +72,20 @@ namespace Reunioes.Api.Controllers
                 .AsNoTracking()
                 .AsQueryable();
 
-            // Filtrar pelo nome da sala
+            // Filtrar pelo nome
             if (!string.IsNullOrWhiteSpace(nome))
             {
                 consulta = consulta.Where(s =>
                     EF.Functions.ILike(s.Nome, $"%{nome.Trim()}%"));
             }
 
-            // Ordenar por andar e depois por nome
+            // Ordenar por andar e nome
             consulta = consulta
                 .OrderBy(s => s.Andar)
                 .ThenBy(s => s.Nome)
                 .ThenBy(s => s.Id);
 
-            // Paginar os resultados de 10 em 10
+            // Paginação de 10 em 10
             const int tamanhoPagina = 10;
 
             var salas = await consulta
@@ -94,6 +94,128 @@ namespace Reunioes.Api.Controllers
                 .ToListAsync();
 
             return Ok(salas);
+        }
+
+        // GET: api/salas/horas-livres?inicio=2026-11-16&fim=2026-11-16
+        [HttpGet("horas-livres")]
+        public async Task<IActionResult> ConsultarHorasLivres(
+            [FromQuery] DateOnly inicio,
+            [FromQuery] DateOnly fim)
+        {
+            if (inicio == default || fim == default)
+            {
+                return BadRequest(
+                    "Informe as datas de início e fim.");
+            }
+
+            if (inicio > fim)
+            {
+                return BadRequest(
+                    "A data inicial não pode ser posterior à final.");
+            }
+
+            // Limitar o período para evitar consultas excessivas
+            if (fim.DayNumber - inicio.DayNumber > 365)
+            {
+                return BadRequest(
+                    "O período máximo permitido é de 366 dias.");
+            }
+
+            // Horário de funcionamento: 08h às 19h
+            const double horasPorDia = 11;
+
+            var quantidadeDias = fim.DayNumber - inicio.DayNumber + 1;
+            var totalHorasPeriodo = quantidadeDias * horasPorDia;
+
+            var fusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
+                "America/Sao_Paulo");
+
+            var inicioLocal = inicio.ToDateTime(
+                TimeOnly.MinValue,
+                DateTimeKind.Unspecified);
+
+            var fimExclusivoLocal = fim.AddDays(1).ToDateTime(
+                TimeOnly.MinValue,
+                DateTimeKind.Unspecified);
+
+            var inicioUtc = TimeZoneInfo.ConvertTimeToUtc(
+                inicioLocal, fusoBrasilia);
+
+            var fimUtc = TimeZoneInfo.ConvertTimeToUtc(
+                fimExclusivoLocal, fusoBrasilia);
+
+            // Buscar salas cadastradas
+            var salas = await _context.Salas
+                .AsNoTracking()
+                .OrderBy(s => s.Andar)
+                .ThenBy(s => s.Nome)
+                .ToListAsync();
+
+            // Buscar reservas que intersectam o período
+            var reservas = await _context.Reservas
+                .AsNoTracking()
+                .Where(r =>
+                    r.Inicio < fimUtc &&
+                    r.Fim > inicioUtc)
+                .ToListAsync();
+
+            var resultado = new List<object>();
+
+            foreach (var sala in salas)
+            {
+                double horasOcupadas = 0;
+
+                foreach (var reserva in reservas
+                    .Where(r => r.SalaId == sala.Id))
+                {
+                    var inicioReserva = TimeZoneInfo.ConvertTimeFromUtc(
+                        reserva.Inicio, fusoBrasilia);
+
+                    var fimReserva = TimeZoneInfo.ConvertTimeFromUtc(
+                        reserva.Fim, fusoBrasilia);
+
+                    // Percorrer cada dia solicitado
+                    for (var dia = inicio;
+                         dia <= fim;
+                         dia = dia.AddDays(1))
+                    {
+                        var abertura = dia.ToDateTime(
+                            new TimeOnly(8, 0));
+
+                        var fechamento = dia.ToDateTime(
+                            new TimeOnly(19, 0));
+
+                        var inicioOcupado =
+                            inicioReserva > abertura
+                                ? inicioReserva
+                                : abertura;
+
+                        var fimOcupado =
+                            fimReserva < fechamento
+                                ? fimReserva
+                                : fechamento;
+
+                        if (fimOcupado > inicioOcupado)
+                        {
+                            horasOcupadas +=
+                                (fimOcupado - inicioOcupado).TotalHours;
+                        }
+                    }
+                }
+
+                var horasLivres = Math.Max(
+                    0, totalHorasPeriodo - horasOcupadas);
+
+                resultado.Add(new
+                {
+                    salaId = sala.Id,
+                    nome = sala.Nome,
+                    andar = sala.Andar,
+                    horasLivres = Math.Round(horasLivres, 2)
+                });
+            }
+
+            return Ok(resultado);
         }
 
         // PUT: api/salas/1
@@ -127,13 +249,11 @@ namespace Reunioes.Api.Controllers
                 return NotFound("Sala não encontrada.");
             }
 
-            // Atualizar os dados da sala
             sala.Nome = salaAtualizada.Nome.Trim();
             sala.Andar = salaAtualizada.Andar;
             sala.QuantidadeAssentos =
                 salaAtualizada.QuantidadeAssentos;
 
-            // Salvar alterações no PostgreSQL
             await _context.SaveChangesAsync();
 
             return NoContent();
@@ -148,7 +268,6 @@ namespace Reunioes.Api.Controllers
                 return BadRequest("ID inválido.");
             }
 
-            // Procurar a sala no banco de dados
             var sala = await _context.Salas.FindAsync(id);
 
             if (sala == null)
@@ -156,10 +275,7 @@ namespace Reunioes.Api.Controllers
                 return NotFound("Sala não encontrada.");
             }
 
-            // Excluir a sala
             _context.Salas.Remove(sala);
-
-            // Salvar a exclusão no PostgreSQL
             await _context.SaveChangesAsync();
 
             return NoContent();
