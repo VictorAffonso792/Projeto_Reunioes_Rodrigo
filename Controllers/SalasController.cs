@@ -56,5 +56,44 @@ namespace Reunioes.Api.Controllers
 
             return Ok(sala);
         }
+
+        // GET: api/salas
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Sala>>> ListarSalas(
+            [FromQuery] string? nome,
+            [FromQuery] int pagina = 1)
+        {
+            if (pagina < 1)
+            {
+                return BadRequest("A página deve ser maior que zero.");
+            }
+
+            var consulta = _context.Salas
+                .AsNoTracking()
+                .AsQueryable();
+
+            // Filtrar pelo nome da sala
+            if (!string.IsNullOrWhiteSpace(nome))
+            {
+                consulta = consulta.Where(s =>
+                    EF.Functions.ILike(s.Nome, $"%{nome.Trim()}%"));
+            }
+
+            // Ordenar por andar e depois por nome
+            consulta = consulta
+                .OrderBy(s => s.Andar)
+                .ThenBy(s => s.Nome)
+                .ThenBy(s => s.Id);
+
+            // Paginar os resultados de 10 em 10
+            const int tamanhoPagina = 10;
+
+            var salas = await consulta
+                .Skip((pagina - 1) * tamanhoPagina)
+                .Take(tamanhoPagina)
+                .ToListAsync();
+
+            return Ok(salas);
+        }
     }
 }
