@@ -1,0 +1,99 @@
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Reunioes.Api.Data;
+using Reunioes.Api.Models;
+
+namespace Reunioes.Api.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ReservasController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public ReservasController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // POST: api/reservas
+        [HttpPost]
+        public async Task<ActionResult<Reserva>> CadastrarReserva(
+            [FromBody] Reserva reserva)
+        {
+            // Validar o identificador da reserva
+            if (reserva.Id != 0)
+            {
+                return BadRequest(
+                    "O ID deve ser gerado pelo banco de dados.");
+            }
+
+            // Exigir datas com fuso horário UTC
+            if (reserva.Inicio.Kind != DateTimeKind.Utc ||
+                reserva.Fim.Kind != DateTimeKind.Utc)
+            {
+                return BadRequest(
+                    "As datas devem ser informadas em UTC, com Z no final.");
+            }
+
+            // Verificar se a sala existe
+            var salaExiste = await _context.Salas
+                .AnyAsync(s => s.Id == reserva.SalaId);
+
+            if (!salaExiste)
+            {
+                return BadRequest(
+                    "A sala informada não existe.");
+            }
+
+            // Verificar a ordem dos horários
+            if (reserva.Inicio >= reserva.Fim)
+            {
+                return BadRequest(
+                    "O início deve ser anterior ao fim da reserva.");
+            }
+
+            // Converter UTC para o horário de Brasília
+            var fusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
+                "America/Sao_Paulo");
+
+            var inicioLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                reserva.Inicio, fusoBrasilia);
+
+            var fimLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                reserva.Fim, fusoBrasilia);
+
+            // Validar o horário de funcionamento
+            if (inicioLocal.Date != fimLocal.Date ||
+                inicioLocal.TimeOfDay < TimeSpan.FromHours(8) ||
+                fimLocal.TimeOfDay > TimeSpan.FromHours(19))
+            {
+                return BadRequest(
+                    "As reservas devem ocorrer no mesmo dia, " +
+                    "entre 08h e 19h, no horário de Brasília.");
+            }
+
+            // Verificar conflitos na mesma sala
+            var existeConflito = await _context.Reservas
+                .AnyAsync(r =>
+                    r.SalaId == reserva.SalaId &&
+                    r.Inicio < reserva.Fim &&
+                    reserva.Inicio < r.Fim);
+
+            if (existeConflito)
+            {
+                return Conflict(
+                    "Já existe uma reserva para essa sala nesse horário.");
+            }
+
+            // Salvar a reserva no PostgreSQL
+            _context.Reservas.Add(reserva);
+            await _context.SaveChangesAsync();
+
+            return Created(
+                $"/api/reservas/{reserva.Id}",
+                reserva);
+        }
+    }
+}

@@ -11,6 +11,10 @@ namespace Reunioes.Api.Data
         {
         }
 
+        // Tabela de salas
         public DbSet<Sala> Salas { get; set; } = null!;
+
+        // Tabela de reservas
+        public DbSet<Reserva> Reservas { get; set; } = null!;
     }
 }
