@@ -17,6 +17,19 @@ namespace Reunioes.Api.Controllers
             _context = context;
         }
 
+        // GET: api/reservas
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Reserva>>> ListarReservas()
+        {
+            var reservas = await _context.Reservas
+                .AsNoTracking()
+                .OrderBy(r => r.Inicio)
+                .ThenBy(r => r.Id)
+                .ToListAsync();
+
+            return Ok(reservas);
+        }
+
         // GET: api/reservas/3
         [HttpGet("{id}")]
         public async Task<ActionResult<Reserva>> ConsultarReserva(int id)
