@@ -122,7 +122,6 @@ namespace Reunioes.Api.Controllers
             int id,
             [FromBody] Reserva dadosAtualizados)
         {
-            // Buscar a reserva existente
             var reserva = await _context.Reservas
                 .FirstOrDefaultAsync(r => r.Id == id);
 
@@ -131,14 +130,12 @@ namespace Reunioes.Api.Controllers
                 return NotFound("Reserva não encontrada.");
             }
 
-            // Impedir a remarcação de reservas passadas
             if (reserva.Inicio <= DateTime.UtcNow)
             {
                 return BadRequest(
                     "Somente reservas futuras podem ser remarcadas.");
             }
 
-            // Validar o ID informado no corpo
             if (dadosAtualizados.Id != 0 &&
                 dadosAtualizados.Id != id)
             {
@@ -146,7 +143,6 @@ namespace Reunioes.Api.Controllers
                     "O ID informado não corresponde à reserva.");
             }
 
-            // Exigir horários em UTC
             if (dadosAtualizados.Inicio.Kind != DateTimeKind.Utc ||
                 dadosAtualizados.Fim.Kind != DateTimeKind.Utc)
             {
@@ -154,7 +150,6 @@ namespace Reunioes.Api.Controllers
                     "As datas devem ser informadas em UTC, com Z no final.");
             }
 
-            // Verificar se a sala existe
             var salaExiste = await _context.Salas
                 .AnyAsync(s => s.Id == dadosAtualizados.SalaId);
 
@@ -163,21 +158,18 @@ namespace Reunioes.Api.Controllers
                 return BadRequest("A sala informada não existe.");
             }
 
-            // Validar a ordem dos horários
             if (dadosAtualizados.Inicio >= dadosAtualizados.Fim)
             {
                 return BadRequest(
                     "O início deve ser anterior ao fim da reserva.");
             }
 
-            // Impedir remarcação para uma data passada
             if (dadosAtualizados.Inicio <= DateTime.UtcNow)
             {
                 return BadRequest(
                     "O novo início da reserva deve estar no futuro.");
             }
 
-            // Converter os horários para Brasília
             var fusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
                 "America/Sao_Paulo");
 
@@ -187,7 +179,6 @@ namespace Reunioes.Api.Controllers
             var fimLocal = TimeZoneInfo.ConvertTimeFromUtc(
                 dadosAtualizados.Fim, fusoBrasilia);
 
-            // Validar horário de funcionamento
             if (inicioLocal.Date != fimLocal.Date ||
                 inicioLocal.TimeOfDay < TimeSpan.FromHours(8) ||
                 fimLocal.TimeOfDay > TimeSpan.FromHours(19))
@@ -197,7 +188,6 @@ namespace Reunioes.Api.Controllers
                     "entre 08h e 19h, no horário de Brasília.");
             }
 
-            // Verificar conflitos, ignorando a própria reserva
             var existeConflito = await _context.Reservas
                 .AnyAsync(r =>
                     r.Id != id &&
@@ -211,11 +201,28 @@ namespace Reunioes.Api.Controllers
                     "Já existe uma reserva para essa sala nesse horário.");
             }
 
-            // Atualizar os dados da reserva
             reserva.SalaId = dadosAtualizados.SalaId;
             reserva.Inicio = dadosAtualizados.Inicio;
             reserva.Fim = dadosAtualizados.Fim;
 
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // DELETE: api/reservas/3
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> CancelarReserva(int id)
+        {
+            var reserva = await _context.Reservas
+                .FirstOrDefaultAsync(r => r.Id == id);
+
+            if (reserva == null)
+            {
+                return NotFound("Reserva não encontrada.");
+            }
+
+            _context.Reservas.Remove(reserva);
             await _context.SaveChangesAsync();
 
             return NoContent();
