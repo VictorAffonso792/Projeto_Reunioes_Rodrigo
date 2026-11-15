@@ -95,5 +95,74 @@ namespace Reunioes.Api.Controllers
 
             return Ok(salas);
         }
+
+        // PUT: api/salas/1
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> AtualizarSala(
+            int id,
+            [FromBody] Sala salaAtualizada)
+        {
+            if (id <= 0)
+            {
+                return BadRequest("ID inválido.");
+            }
+
+            if (salaAtualizada.Id != 0 &&
+                salaAtualizada.Id != id)
+            {
+                return BadRequest(
+                    "O ID informado não corresponde ao da sala.");
+            }
+
+            if (string.IsNullOrWhiteSpace(salaAtualizada.Nome))
+            {
+                return BadRequest(
+                    "O nome da sala é obrigatório.");
+            }
+
+            var sala = await _context.Salas.FindAsync(id);
+
+            if (sala == null)
+            {
+                return NotFound("Sala não encontrada.");
+            }
+
+            // Atualizar os dados da sala
+            sala.Nome = salaAtualizada.Nome.Trim();
+            sala.Andar = salaAtualizada.Andar;
+            sala.QuantidadeAssentos =
+                salaAtualizada.QuantidadeAssentos;
+
+            // Salvar alterações no PostgreSQL
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // DELETE: api/salas/11
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> ExcluirSala(int id)
+        {
+            if (id <= 0)
+            {
+                return BadRequest("ID inválido.");
+            }
+
+            // Procurar a sala no banco de dados
+            var sala = await _context.Salas.FindAsync(id);
+
+            if (sala == null)
+            {
+                return NotFound("Sala não encontrada.");
+            }
+
+            // Excluir a sala
+            _context.Salas.Remove(sala);
+
+            // Salvar a exclusão no PostgreSQL
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
     }
 }
