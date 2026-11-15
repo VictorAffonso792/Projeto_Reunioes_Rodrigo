@@ -17,6 +17,22 @@ namespace Reunioes.Api.Controllers
             _context = context;
         }
 
+        // GET: api/reservas/3
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Reserva>> ConsultarReserva(int id)
+        {
+            var reserva = await _context.Reservas
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == id);
+
+            if (reserva == null)
+            {
+                return NotFound("Reserva não encontrada.");
+            }
+
+            return Ok(reserva);
+        }
+
         // POST: api/reservas
         [HttpPost]
         public async Task<ActionResult<Reserva>> CadastrarReserva(
